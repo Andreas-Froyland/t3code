@@ -140,6 +140,7 @@ import {
   planPinnedReorder,
   reduceSidebarProjectScopeMenuState,
   resolveAdjacentThreadId,
+  resolveSidebarProjectScopePress,
   resolveSidebarThreadStatus,
   searchSidebarThreadsByTitle,
   shouldCreateNewThreadInCurrentProject,
@@ -2019,7 +2020,11 @@ export default function Sidebar() {
 
   // Project scope: one menu above the list. Scoping filters the list without
   // making the header width depend on the number or length of project names.
-  const [projectScopeKey, setProjectScopeKey] = useState<string | null>(null);
+  // Empty keys show every project; plain presses scope to one project, and
+  // CTRL/CMD presses toggle projects into a multi-scope while the popup stays
+  // open.
+  const [projectScopeKeys, setProjectScopeKeys] = useState<readonly string[]>([]);
+  const projectScopePressToggleRef = useRef(false);
   // {value, label} items let Base UI drive the combobox selection contract
   // while the popup search filters the same collection.
   const projectScopeItems = useMemo(
@@ -2036,11 +2041,13 @@ export default function Sidebar() {
     () => new Map(projectGroups.map((project) => [project.projectKey, project] as const)),
     [projectGroups],
   );
-  const selectedProjectScopeItem = useMemo(
+  const selectedProjectScopeItems = useMemo(
     () =>
-      projectScopeItems.find((item) => item.value === (projectScopeKey ?? "all")) ??
-      projectScopeItems[0]!,
-    [projectScopeItems, projectScopeKey],
+      projectScopeKeys.flatMap((key) => {
+        const item = projectScopeItems.find((candidate) => candidate.value === key);
+        return item ? [item] : [];
+      }),
+    [projectScopeItems, projectScopeKeys],
   );
   const [projectScopeMenuState, dispatchProjectScopeMenu] = useReducer(
     reduceSidebarProjectScopeMenuState,
@@ -2058,36 +2065,53 @@ export default function Sidebar() {
     () =>
       filterSidebarProjectScopeItems({
         items: projectScopeItems,
-        activeScopeKey: projectScopeKey,
+        hasActiveScope: projectScopeKeys.length > 0,
         query: projectScopeMenuState.query,
         matches: (item, query) =>
           projectScopeFilter.contains(item, query, (candidate) => candidate.label),
       }),
-    [projectScopeFilter, projectScopeItems, projectScopeKey, projectScopeMenuState.query],
+    [projectScopeFilter, projectScopeItems, projectScopeKeys, projectScopeMenuState.query],
   );
-  const scopedProjectGroup = useMemo(
+  const scopedProjectGroups = useMemo(() => {
+    if (projectScopeKeys.length === 0) return null;
+    const scopedKeys = new Set(projectScopeKeys);
+    return projectGroups.filter((project) => scopedKeys.has(project.projectKey));
+  }, [projectGroups, projectScopeKeys]);
+  const soleScopedProjectGroup =
+    scopedProjectGroups !== null && scopedProjectGroups.length === 1
+      ? scopedProjectGroups[0]!
+      : null;
+  const scopedProjectLabel = useMemo(
     () =>
-      projectScopeKey === null
-        ? null
-        : (projectGroups.find((project) => project.projectKey === projectScopeKey) ?? null),
-    [projectGroups, projectScopeKey],
+      scopedProjectGroups === null
+        ? "All projects"
+        : scopedProjectGroups.map((project) => project.displayName).join(", "),
+    [scopedProjectGroups],
   );
-  const scopedProjectKeys = useMemo(
-    () =>
-      scopedProjectGroup === null
-        ? null
-        : new Set(
-            scopedProjectGroup.memberProjectRefs.map(
-              (projectRef) => `${projectRef.environmentId}:${projectRef.projectId}`,
-            ),
-          ),
-    [scopedProjectGroup],
-  );
-  useEffect(() => {
-    if (projectScopeKey !== null && scopedProjectGroup === null) {
-      setProjectScopeKey(null);
+  // The scope row truncates once several projects are selected, so hover
+  // reveals the full joined list; a single project fits on the row itself.
+  const scopedProjectTooltip = {
+    children: scopedProjectLabel,
+    hidden: scopedProjectGroups === null || scopedProjectGroups.length <= 1,
+  };
+  const scopedProjectKeys = useMemo(() => {
+    if (scopedProjectGroups === null) return null;
+    const keys = new Set<string>();
+    for (const project of scopedProjectGroups) {
+      for (const projectRef of project.memberProjectRefs) {
+        keys.add(`${projectRef.environmentId}:${projectRef.projectId}`);
+      }
     }
-  }, [projectScopeKey, scopedProjectGroup]);
+    return keys;
+  }, [scopedProjectGroups]);
+  useEffect(() => {
+    if (projectScopeKeys.length === 0) return;
+    const existingKeys = new Set(projectGroups.map((project) => project.projectKey));
+    const nextKeys = projectScopeKeys.filter((key) => existingKeys.has(key));
+    if (nextKeys.length !== projectScopeKeys.length) {
+      setProjectScopeKeys(nextKeys);
+    }
+  }, [projectGroups, projectScopeKeys]);
   // Count-only subscription: the parent needs "are there draft rows" for the
   // empty state, while SidebarDraftBlock owns the per-keystroke content
   // subscription. Selecting a number keeps typing in a draft composer from
@@ -2118,7 +2142,7 @@ export default function Sidebar() {
   // hidden now, and bulk actions must never count or touch invisible rows.
   useEffect(() => {
     clearSelection();
-  }, [clearSelection, projectScopeKey]);
+  }, [clearSelection, projectScopeKeys]);
 
   const openProjectSettings = useCallback(
     (projectGroup: SidebarProjectSnapshot) => {
@@ -2268,7 +2292,12 @@ export default function Sidebar() {
   // filter context changes so a scope/search flip never inherits a deep
   // page state.
   const [settledVisibleCount, setSettledVisibleCount] = useState(SETTLED_TAIL_INITIAL_COUNT);
-  const settledResetKey = projectScopeKey ?? "all";
+  // Sorted so the same scope set resets the tail identically no matter what
+  // order the projects were toggled in.
+  const settledResetKey = useMemo(
+    () => (projectScopeKeys.length === 0 ? "all" : [...projectScopeKeys].sort().join(",")),
+    [projectScopeKeys],
+  );
   const lastSettledResetKeyRef = useRef(settledResetKey);
   if (lastSettledResetKeyRef.current !== settledResetKey) {
     lastSettledResetKeyRef.current = settledResetKey;
@@ -3603,6 +3632,7 @@ export default function Sidebar() {
             {projectGroups.length > 0 ? (
               <div className="flex items-center gap-1">
                 <Combobox
+                  multiple
                   items={projectScopeItems}
                   filteredItems={filteredProjectScopeItems}
                   autoHighlight
@@ -3612,37 +3642,54 @@ export default function Sidebar() {
                   onOpenChange={(open) => {
                     dispatchProjectScopeMenu({ type: "open-changed", open });
                   }}
-                  value={selectedProjectScopeItem}
-                  onValueChange={(item) => {
-                    if (!item) return;
-                    setProjectScopeKey(item.value === "all" ? null : item.value);
+                  value={selectedProjectScopeItems}
+                  onValueChange={(nextItems, eventDetails) => {
+                    // The selection stays fully controlled: cancel Base UI's
+                    // write so CTRL-toggling keeps the search query and popup
+                    // alive, then derive the pressed project from the toggle.
+                    eventDetails.cancel();
+                    const press = resolveSidebarProjectScopePress({
+                      previousKeys: projectScopeKeys,
+                      nextKeys: nextItems.map((item) => item.value),
+                      toggleMode: projectScopePressToggleRef.current,
+                    });
+                    if (press === null) return;
+                    if (press.type === "toggle") {
+                      setProjectScopeKeys((keys) =>
+                        keys.includes(press.key)
+                          ? keys.filter((key) => key !== press.key)
+                          : [...keys, press.key],
+                      );
+                      return;
+                    }
+                    setProjectScopeKeys(press.type === "solo" ? [press.key] : []);
+                    dispatchProjectScopeMenu({ type: "open-changed", open: false });
                   }}
                 >
                   <ComboboxTrigger
                     render={
                       <SidebarMenuButton
                         aria-label="Filter threads by project"
+                        tooltip={scopedProjectTooltip}
                         className="min-w-0 flex-1 ps-[calc(var(--sidebar-row-content-inset)-1px)] focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
                       />
                     }
                   >
-                    {scopedProjectGroup ? (
+                    {soleScopedProjectGroup ? (
                       <span className="flex shrink-0">
                         <ProjectFavicon
-                          environmentId={scopedProjectGroup.environmentId}
-                          cwd={scopedProjectGroup.workspaceRoot}
-                          projectName={scopedProjectGroup.displayName}
-                          faviconPath={scopedProjectGroup.faviconPath}
-                          projectIcon={scopedProjectGroup.projectIcon}
+                          environmentId={soleScopedProjectGroup.environmentId}
+                          cwd={soleScopedProjectGroup.workspaceRoot}
+                          projectName={soleScopedProjectGroup.displayName}
+                          faviconPath={soleScopedProjectGroup.faviconPath}
+                          projectIcon={soleScopedProjectGroup.projectIcon}
                           className="size-4"
                         />
                       </span>
                     ) : (
                       <FolderIcon className="size-4 shrink-0" />
                     )}
-                    <span className="min-w-0 flex-1 truncate">
-                      {scopedProjectGroup?.displayName ?? "All projects"}
-                    </span>
+                    <span className="min-w-0 flex-1 truncate">{scopedProjectLabel}</span>
                     <ChevronDownIcon className="-mr-px size-4 shrink-0" />
                   </ComboboxTrigger>
                   <ComboboxPopup
@@ -3674,7 +3721,19 @@ export default function Sidebar() {
                       </div>
                     </div>
                     <ComboboxEmpty>No matching projects.</ComboboxEmpty>
-                    <ComboboxList>
+                    <ComboboxList
+                      // Capture the press modifiers before Base UI's item
+                      // handlers commit: the selection callback fires inside
+                      // the same event, after this ref is already fresh.
+                      onPointerDownCapture={(event) => {
+                        projectScopePressToggleRef.current = event.ctrlKey || event.metaKey;
+                      }}
+                      onKeyDownCapture={(event) => {
+                        if (event.key === "Enter") {
+                          projectScopePressToggleRef.current = event.ctrlKey || event.metaKey;
+                        }
+                      }}
+                    >
                       {(item: (typeof projectScopeItems)[number]) => {
                         const project = projectGroupByScopeKey.get(item.value) ?? null;
                         return (
@@ -4112,8 +4171,10 @@ export default function Sidebar() {
                     Add project
                   </button>
                 </>
-              ) : scopedProjectGroup ? (
-                `No threads in ${scopedProjectGroup.displayName} yet`
+              ) : soleScopedProjectGroup ? (
+                `No threads in ${soleScopedProjectGroup.displayName} yet`
+              ) : scopedProjectGroups ? (
+                "No threads in the selected projects yet"
               ) : (
                 "No threads yet"
               )}
