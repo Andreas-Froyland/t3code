@@ -642,6 +642,18 @@ export function filterSidebarProjectScopeItems<TItem extends { readonly value: s
   return input.hasActiveScope ? input.items : projectItems;
 }
 
+/**
+ * True when a scope item was pressed with CTRL/CMD held. Base UI hands the
+ * selection callback the original press event -- the pointer event for clicks
+ * and the search input's keydown for Enter -- so the modifier state is read
+ * straight off it. Events that carry no modifier state read as a plain press.
+ */
+export function isSidebarProjectScopeTogglePress(event: unknown): boolean {
+  if (typeof event !== "object" || event === null) return false;
+  const { ctrlKey, metaKey } = event as { ctrlKey?: unknown; metaKey?: unknown };
+  return ctrlKey === true || metaKey === true;
+}
+
 export type SidebarProjectScopePress =
   | { readonly type: "reset" }
   | { readonly type: "solo"; readonly key: string }

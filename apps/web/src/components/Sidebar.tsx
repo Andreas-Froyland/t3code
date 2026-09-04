@@ -135,6 +135,7 @@ import {
   firstValidTimestampMs,
   hasUnseenCompletion,
   isSidebarNestedLinkClick,
+  isSidebarProjectScopeTogglePress,
   isTrailingDoubleClick,
   orderItemsByPreferredIds,
   planPinnedReorder,
@@ -2041,7 +2042,6 @@ export default function Sidebar() {
   // CTRL/CMD presses toggle projects into a multi-scope while the popup stays
   // open.
   const [projectScopeKeys, setProjectScopeKeys] = useState<readonly string[]>([]);
-  const projectScopePressToggleRef = useRef(false);
   // {value, label} items let Base UI drive the combobox selection contract
   // while the popup search filters the same collection.
   const projectScopeItems = useMemo(
@@ -2089,10 +2089,15 @@ export default function Sidebar() {
       }),
     [projectScopeFilter, projectScopeItems, projectScopeKeys, projectScopeMenuState.query],
   );
+  // Null means unscoped. Scoped keys whose groups have all vanished (a dropped
+  // remote environment, a deleted project) collapse back to null rather than an
+  // empty list, so the row never renders a blank label or an empty list for the
+  // frame before the prune effect below rewrites the keys.
   const scopedProjectGroups = useMemo(() => {
     if (projectScopeKeys.length === 0) return null;
     const scopedKeys = new Set(projectScopeKeys);
-    return projectGroups.filter((project) => scopedKeys.has(project.projectKey));
+    const groups = projectGroups.filter((project) => scopedKeys.has(project.projectKey));
+    return groups.length === 0 ? null : groups;
   }, [projectGroups, projectScopeKeys]);
   const soleScopedProjectGroup =
     scopedProjectGroups !== null && scopedProjectGroups.length === 1
@@ -3668,7 +3673,7 @@ export default function Sidebar() {
                     const press = resolveSidebarProjectScopePress({
                       previousKeys: projectScopeKeys,
                       nextKeys: nextItems.map((item) => item.value),
-                      toggleMode: projectScopePressToggleRef.current,
+                      toggleMode: isSidebarProjectScopeTogglePress(eventDetails.event),
                     });
                     if (press === null) return;
                     if (press.type === "toggle") {
@@ -3738,19 +3743,7 @@ export default function Sidebar() {
                       </div>
                     </div>
                     <ComboboxEmpty>No matching projects.</ComboboxEmpty>
-                    <ComboboxList
-                      // Capture the press modifiers before Base UI's item
-                      // handlers commit: the selection callback fires inside
-                      // the same event, after this ref is already fresh.
-                      onPointerDownCapture={(event) => {
-                        projectScopePressToggleRef.current = event.ctrlKey || event.metaKey;
-                      }}
-                      onKeyDownCapture={(event) => {
-                        if (event.key === "Enter") {
-                          projectScopePressToggleRef.current = event.ctrlKey || event.metaKey;
-                        }
-                      }}
-                    >
+                    <ComboboxList>
                       {(item: (typeof projectScopeItems)[number]) => {
                         const project = projectGroupByScopeKey.get(item.value) ?? null;
                         return (

@@ -12,6 +12,7 @@ import {
   resolveAdjacentThreadId,
   reduceSidebarProjectScopeMenuState,
   resolveSidebarProjectScopePress,
+  isSidebarProjectScopeTogglePress,
   getFallbackThreadIdAfterDelete,
   getVisibleThreadsForProject,
   getProjectSortTimestamp,
@@ -777,6 +778,28 @@ describe("filterSidebarProjectScopeItems", () => {
   it("returns matching projects in source order and supports no-match results", () => {
     expect(filter(false, "WORK")).toEqual([items[1]]);
     expect(filter(false, "missing")).toEqual([]);
+  });
+});
+
+describe("isSidebarProjectScopeTogglePress", () => {
+  it("reads the modifier off a pointer press", () => {
+    expect(isSidebarProjectScopeTogglePress({ ctrlKey: true, metaKey: false })).toBe(true);
+    expect(isSidebarProjectScopeTogglePress({ ctrlKey: false, metaKey: true })).toBe(true);
+    expect(isSidebarProjectScopeTogglePress({ ctrlKey: false, metaKey: false })).toBe(false);
+  });
+
+  // Enter commits through the search input's keydown, which carries the same
+  // modifier flags as a click, so both press paths resolve identically.
+  it("reads the modifier off an Enter keydown", () => {
+    expect(isSidebarProjectScopeTogglePress({ key: "Enter", ctrlKey: true })).toBe(true);
+    expect(isSidebarProjectScopeTogglePress({ key: "Enter", metaKey: true })).toBe(true);
+    expect(isSidebarProjectScopeTogglePress({ key: "Enter" })).toBe(false);
+  });
+
+  it("treats events without modifier state as a plain press", () => {
+    expect(isSidebarProjectScopeTogglePress(null)).toBe(false);
+    expect(isSidebarProjectScopeTogglePress(undefined)).toBe(false);
+    expect(isSidebarProjectScopeTogglePress({})).toBe(false);
   });
 });
 
