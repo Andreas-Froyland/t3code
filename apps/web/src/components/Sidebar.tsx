@@ -4432,7 +4432,7 @@ export default function Sidebar() {
                       return;
                     }
                     const press = resolveSidebarProjectScopePress({
-                      previousKeys: projectScopeKeys,
+                      previousKeys: selectedProjectScopeItems.map((item) => item.value),
                       nextKeys: nextItems.map((item) => item.value),
                       toggleMode: isSidebarProjectScopeTogglePress(eventDetails.event),
                     });
