@@ -4545,6 +4545,14 @@ export default function Sidebar() {
                     ) : (
                       <FolderIcon className="size-4" />
                     )}
+                    {scopedProjectGroups !== null && scopedProjectGroups.length > 1 ? (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -right-0.5 -top-0.5 flex min-w-3.5 items-center justify-center rounded-full bg-sidebar-foreground px-0.5 text-3xs leading-3.5 text-sidebar"
+                      >
+                        {scopedProjectGroups.length}
+                      </span>
+                    ) : null}
                   </ComboboxTrigger>
                   <ComboboxPopup
                     align="start"
@@ -4560,9 +4568,26 @@ export default function Sidebar() {
                       placeholder="Search projects..."
                       value={projectScopeMenuState.query}
                       onKeyDown={(event) => {
+                        if (event.defaultPrevented || event.nativeEvent.isComposing) {
+                          return;
+                        }
                         if (
-                          event.defaultPrevented ||
-                          event.nativeEvent.isComposing ||
+                          event.key === "Enter" &&
+                          (event.ctrlKey || event.metaKey) &&
+                          !event.altKey &&
+                          !event.shiftKey
+                        ) {
+                          event.preventDefault();
+                          const scopeKey = highlightedProjectScopeKeyRef.current;
+                          if (!scopeKey || !projectGroupByScopeKey.has(scopeKey)) return;
+                          setProjectScopeKeys(
+                            projectScopeKeys.includes(scopeKey)
+                              ? projectScopeKeys.filter((key) => key !== scopeKey)
+                              : [...projectScopeKeys, scopeKey],
+                          );
+                          return;
+                        }
+                        if (
                           event.ctrlKey ||
                           event.altKey ||
                           event.metaKey ||
