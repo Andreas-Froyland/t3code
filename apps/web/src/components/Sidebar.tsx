@@ -4528,6 +4528,7 @@ export default function Sidebar() {
                   <ComboboxTrigger
                     render={
                       <SidebarHeaderIconButton
+                        className={scopedProjectGroups !== null ? "w-auto max-w-28" : undefined}
                         label={
                           scopedProjectGroups !== null
                             ? `Filter threads by project: ${scopedProjectLabel}`
@@ -4536,23 +4537,23 @@ export default function Sidebar() {
                       />
                     }
                   >
-                    {soleScopedProjectGroup ? (
-                      // Wrapped so the button's direct-child svg color rule cannot override
-                      // a project's own icon color.
-                      <span className="flex shrink-0">
-                        <ProjectFavicon project={soleScopedProjectGroup} className="size-4" />
+                    {scopedProjectGroups !== null ? (
+                      <span className="flex min-w-0 items-center gap-1 px-1.5">
+                        {soleScopedProjectGroup ? (
+                          <ProjectFavicon
+                            project={soleScopedProjectGroup}
+                            className="size-4 shrink-0"
+                          />
+                        ) : (
+                          <FolderIcon className="size-4 shrink-0" />
+                        )}
+                        <span aria-hidden="true" className="min-w-0 truncate text-xs">
+                          {scopedProjectLabel}
+                        </span>
                       </span>
                     ) : (
                       <FolderIcon className="size-4" />
                     )}
-                    {scopedProjectGroups !== null && scopedProjectGroups.length > 1 ? (
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute -right-0.5 -top-0.5 flex min-w-3.5 items-center justify-center rounded-full bg-sidebar-foreground px-0.5 text-3xs leading-3.5 text-sidebar"
-                      >
-                        {scopedProjectGroups.length}
-                      </span>
-                    ) : null}
                   </ComboboxTrigger>
                   <ComboboxPopup
                     align="start"

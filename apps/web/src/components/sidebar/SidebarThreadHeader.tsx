@@ -1,10 +1,8 @@
 /**
  * The sidebar header: one row holding search, project scope and new thread.
  *
- * Search owns the row's text and spans it. Project scope collapses to an icon
- * that sits with new-project and new-thread as a segmented group at the end.
- * The scope icon swaps to the project favicon while a project is selected,
- * so the header still names the scope after the row that showed it is gone.
+ * Search spans the row beside project scope, new-project and new-thread controls.
+ * A selected scope shows its project favicon and a truncated name.
  *
  * The scope picker itself is passed in: its combobox state lives with the rest
  * of the sidebar's scope logic. `searchFieldRef` lands on the search field so
@@ -29,7 +27,7 @@ export interface SidebarThreadHeaderProps {
   searchFieldRef?: RefObject<HTMLDivElement | null>;
   /** Without projects there is nothing to scope, so those controls stay out. */
   hasProjects: boolean;
-  /** The project scope combobox, rendered as the first icon of the group. */
+  /** The project scope combobox, rendered first in the control group. */
   projectScope: ReactNode;
   onNewProject: () => void;
   /** Receives the click so Shift+click can skip the project picker. */
@@ -187,7 +185,7 @@ export function SidebarHeaderIconButton({
             type="button"
             aria-label={label}
             {...rest}
-            className={cn("relative size-7 shrink-0", className)}
+            className={cn("relative h-7 w-7 shrink-0", className)}
           />
         }
       >
